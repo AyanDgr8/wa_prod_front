@@ -1,0 +1,78 @@
+/* src/components/routes/Forms/Instance/Instance.css */
+
+
+.instance-headi {
+    color:white;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    letter-spacing: 0.05rem;
+    margin-bottom: 1rem;
+    margin-top: 1rem;
+}
+
+.instance-headi:hover {
+    color: #EF6F53;
+}
+  
+.form-groupie {
+    display: flex;
+    align-items: center;
+    background-color: #EF6F53;
+    padding: 0.5rem 0.75rem;
+    width: 70%;
+    margin: auto;
+    margin-top: 1rem;
+    border-radius: 10px;
+}
+
+.form-groupie label {
+    flex: 40%;  
+    text-align: left;  
+    font-size: 1rem;
+    color: white;
+    font-weight: 600;
+    margin-right: 0.1rem;
+}
+
+.form-groupie input {
+    flex: 30%;  
+    padding: 0.15rem;
+    font-size: 1rem;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    outline: none;
+    text-align: left;
+    font-weight: 200;
+}
+
+.form-groupie:hover {
+    background-color: #d15846;
+}
+
+
+.form-instance button {
+    background-color: white;
+    color: #364c63;
+    border: none;
+    width: 20%;
+    margin: auto;
+    margin-top: 1rem;
+    padding: 0.1rem;
+    font-size: 1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.form-instance button:hover {
+    background-color: #d15846;
+    color: white;
+}
+
+.alertttt{
+    color: white;
+    margin-top: 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+}

@@ -1,0 +1,131 @@
+// src/components/routes/Header/Header.js
+
+import React from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { handleLogoutApi } from '../../../utils/api';
+import './Header.css';
+
+const Header = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const [hasInstance, setHasInstance] = React.useState(false);
+    const [instanceId, setInstanceId] = React.useState(null);
+    
+    // Extract instance ID from the current path
+    const pathParts = location.pathname.split('/');
+    const currentInstanceId = pathParts.length > 1 ? pathParts[1] : null;
+    
+    const isLoggedIn = !!localStorage.getItem("token");
+
+    React.useEffect(() => {
+        const checkInstance = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    setHasInstance(false);
+                    return;
+                }
+
+                const apiUrl = process.env.REACT_APP_API_URL;
+                const response = await fetch(`${apiUrl}/user-instance`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setHasInstance(data.hasInstance);
+                    // If we have an instanceId in the path but no instance set, update it
+                    if (data.hasInstance && currentInstanceId && !instanceId) {
+                            setInstanceId(currentInstanceId);
+                        }
+                }
+            } catch (error) {
+                console.error('Error checking instance:', error);
+                setHasInstance(false);
+            }
+        };
+
+        checkInstance();
+    }, [isLoggedIn, currentInstanceId]); // Re-run when login status or instanceId changes
+
+    const handleLogout = async () => {
+        const confirmLogout = window.confirm("Are you sure you want to log out?");
+        if (!confirmLogout) return;
+        try {
+            await handleLogoutApi(); // This will handle the device ID  and redirect
+        } catch (error) {
+            console.error('Error during logout:', error);
+            // The logout function will handle cleanup and redirect even on error
+        }
+    };
+
+    const handleLogoClick = () => {
+        navigate('/create-instance');
+    };
+
+    return (
+        <div className="header-container">
+            <img
+                src="/uploads/logo.webp"
+                className="logo"
+                alt="Company Logo"
+                aria-label="Logo"
+            />
+            <div className="header-right">
+                {isLoggedIn && (
+                    <>
+                    {/* Reports button with proper styling */}
+                    {/* {hasInstance && currentInstanceId && (
+                        <Link 
+                            to={`/${currentInstanceId}/reports`}
+                            className="reports-link"
+                            title="View Message Reports"
+                        >
+                            <button className="reports-button">
+                                <i className="fas fa-chart-bar"></i>
+                                Reports
+                            </button>
+                        </Link>
+                    )} */}
+
+                    <div className="profile-section">
+                        <img 
+                            src="/uploads/profile.svg"
+                            className="pro-icon"
+                            alt="profile icon"
+                            aria-label="Profile"
+                            onClick={handleLogout}
+                        />
+                        <span 
+                            onClick={handleLogout} 
+                            style={{ 
+                                cursor: 'pointer', 
+                                marginLeft: '8px', 
+                                fontSize: '0.85rem', 
+                                color: '#666' 
+                            }}
+                        >
+                            Logout
+                        </span>
+            </div>
+                    </>
+                )}
+                {!isLoggedIn && (
+                    <Link to="/login">
+                        <img 
+                            src="/uploads/profile.svg"
+                            className="pro-icon"
+                            alt="profile icon"
+                            aria-label="Profile"
+                        />
+                    </Link>
+                )}
+            </div> 
+        </div>
+    );
+};
+
+export default Header;

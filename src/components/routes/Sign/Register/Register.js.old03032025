@@ -1,0 +1,772 @@
+// /src/components/routes/Sign/Register/Register.js
+
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import "./Register.css"
+
+const Register = () => {
+    const navigate = useNavigate();
+    const [step, setStep] = useState(1); // Step 1: Phone verification, Step 2: Registration form, Step 3: OTP verification
+    const [verificationPhone, setVerificationPhone] = useState("");
+    const [otp, setOtp] = useState("");
+    const [otpTimer, setOtpTimer] = useState(120); // 2 minutes timer
+    const [isLoading, setIsLoading] = useState(false);
+    const [alertMessage, setAlertMessage] = useState(null);
+    const [formData, setFormData] = useState({
+        username: "",
+        telephone: "",
+        email: "",
+        password: "",
+        confirm_password: "",
+        address: "",
+        card_select: "Aadhaar", // Default to Aadhaar
+        card_detail: "",
+        company_name: "",
+        company_gst: ""
+    });
+
+    // Check if user is already registered
+    useEffect(() => {
+        const checkRegistrationStatus = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    // Verify if token is valid
+                    const response = await axios.get(`${process.env.REACT_APP_API_URL}/current-user`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (response.status === 200) {
+                        navigate('/login');
+                    } else {
+                        // If token is invalid, remove it
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('isRegistered');
+                    }
+                }
+            } catch (error) {
+                // If token verification fails, remove it
+                localStorage.removeItem('token');
+                localStorage.removeItem('isRegistered');
+            }
+        };
+
+        checkRegistrationStatus();
+    }, [navigate]);
+
+    // Validation functions
+    const isPanValid = (pan) => {
+        const panRegex = /^[A-Z0-9]{0,10}$/;
+        return panRegex.test(pan);
+    };
+
+    const isAadharValid = (aadhar) => {
+        const aadharRegex = /^[0-9]{0,12}$/;
+        return aadharRegex.test(aadhar);
+    };
+
+    const isGSTValid = (gst) => {
+        // Allow partial input for better UX
+        if (gst.length < 15) {
+            const partialGSTRegex = /^[0-9]{0,2}[A-Z]{0,5}[0-9]{0,4}[A-Z]{0,1}[1-9A-Z]{0,1}Z{0,1}[0-9A-Z]{0,1}$/;
+            return partialGSTRegex.test(gst);
+        }
+        // Full validation for complete GST number
+        const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        return gstRegex.test(gst);
+    };
+
+    const isPasswordValid = (password) => {
+        // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+        return passwordRegex.test(password);
+    };
+
+    const handlePhoneVerification = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        
+        try {
+            // First check if user is already registered in the register table
+            const checkRegistrationResponse = await axios.get(`${process.env.REACT_APP_API_URL}/check-registration/${verificationPhone}`);
+            
+            if (checkRegistrationResponse.data.isRegistered) {
+                setAlertMessage('This phone number is already registered. Please login instead.');
+                setTimeout(() => {
+                    navigate('/login', { replace: true });
+                }, 2000);
+                return;
+            }
+
+            // If not registered, proceed with verification
+            const response = await axios.get(`${process.env.REACT_APP_API_URL}/verify-registration/${verificationPhone}`);
+            const registrationData = response.data.data;
+            
+            // Pre-fill the form with data from website_registration
+            setFormData({
+                ...formData,
+                username: `${registrationData.f_name} ${registrationData.l_name}`,
+                telephone: registrationData.phone,
+                email: registrationData.email,
+                address: registrationData.address || "",
+                company_name: registrationData.company_name || "",
+                company_gst: registrationData.company_gst || "",
+            });
+            
+            setStep(2); // Move to registration form
+        } catch (error) {
+            if (error.response?.status === 404) {
+                setAlertMessage('Phone number not found in registrations. Please complete the payment process first.');
+            } else {
+                setAlertMessage(error.response?.data?.message || 'Verification failed. Please try again.');
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleAadharChange = async (value) => {
+        setFormData(prev => ({ ...prev, card_detail: value }));
+        
+        // If Aadhar number is complete (12 digits), send OTP
+        if (value.length === 12 && formData.card_select === 'Aadhaar') {
+            console.log('Aadhar number complete, sending OTP...');
+            try {
+                const response = await axios.post(
+                    `${process.env.REACT_APP_API_URL}/send-aadhar-otp`,
+                    { aadharNumber: value },
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+                
+                if (response.data.success) {
+                    setStep(3); // Move to OTP verification step
+                    // Start OTP timer
+                    setOtpTimer(120);
+                    const timer = setInterval(() => {
+                        setOtpTimer(prev => {
+                            if (prev <= 0) {
+                                clearInterval(timer);
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                    setAlertMessage('OTP sent successfully! Please verify your Aadhar.');
+                }
+            } catch (error) {
+                console.error('Error sending OTP:', error);
+                setAlertMessage(error.response?.data?.message || 'Failed to send OTP');
+            }
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        
+        // Prevent changing card_select
+        if (name === 'card_select') {
+            return;
+        }
+
+        if (name === 'card_detail' && formData.card_select === 'Aadhaar') {
+            // Only allow digits for Aadhar
+            if (/^\d*$/.test(value) && value.length <= 12) {
+                handleAadharChange(value);
+            }
+        } else if (name === 'card_detail') {
+            // Convert to uppercase for PAN
+            const upperValue = value.toUpperCase();
+            
+            // Apply validation based on card type
+            if (formData.card_select === 'PAN') {
+                if (isPanValid(upperValue)) {
+                    setFormData({ ...formData, [name]: upperValue });
+                }
+            } else if (formData.card_select === 'Aadhaar') {
+                if (isAadharValid(value)) {
+                    setFormData({ ...formData, [name]: value });
+                }
+            }
+        } else if (name === 'company_gst') {
+            // Convert GST to uppercase and validate
+            const upperValue = value.toUpperCase();
+            if (isGSTValid(upperValue) || upperValue === '') {
+                setFormData({ ...formData, [name]: upperValue });
+            }
+        } else {
+            setFormData(prevState => ({
+                ...prevState,
+                [name]: value
+            }));
+        }
+    };
+
+    const validateForm = () => {
+        console.log('Starting form validation');
+        const { username, telephone, email, password, confirm_password, address, card_select, card_detail, company_gst } = formData;
+
+        // Check specifically for card details first
+        if (!card_select || !card_detail) {
+            console.log('Missing card details');
+            setAlertMessage('Please fill in your identification details (PAN or Aadhaar)');
+            return false;
+        }
+
+        if (!username || !telephone || !email || !password || !address) {
+            console.log('Missing required fields:', {
+                username: !username,
+                telephone: !telephone,
+                email: !email,
+                password: !password,
+                address: !address
+            });
+            setAlertMessage('Please fill in all required fields');
+            return false;
+        }
+
+        // Password validation
+        if (!isPasswordValid(password)) {
+            console.log('Invalid password format');
+            setAlertMessage('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number');
+            return false;
+        }
+
+        if (password !== confirm_password) {
+            console.log('Passwords do not match');
+            setAlertMessage('Passwords do not match');
+            return false;
+        }
+
+        // Card validation
+        if (card_select === 'PAN' && !isPanValid(card_detail)) {
+            console.log('Invalid PAN format');
+            setAlertMessage('Please enter a valid PAN number');
+            return false;
+        }
+
+        if (card_select === 'Aadhaar' && !isAadharValid(card_detail)) {
+            console.log('Invalid Aadhar format');
+            setAlertMessage('Please enter a valid Aadhaar number');
+            return false;
+        }
+
+        // GST validation (if provided)
+        if (company_gst && !isGSTValid(company_gst)) {
+            console.log('Invalid GST format');
+            setAlertMessage('Please enter a valid GST number');
+            return false;
+        }
+
+        console.log('Form validation passed');
+        return true;
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (!validateForm()) {
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            
+            // Verify passwords match
+            if (formData.password !== formData.confirm_password) {
+                setAlertMessage('Passwords do not match');
+                setIsLoading(false);
+                return;
+            }
+
+            // First, save all user details
+            const savePasswordResponse = await axios.post(
+                `${process.env.REACT_APP_API_URL}/save-password`,
+                {
+                    email: formData.email,
+                    password: formData.password,
+                    username: formData.username,
+                    telephone: formData.telephone,
+                    address: formData.address,
+                    card_select: 'Aadhaar',
+                    card_detail: formData.card_detail,
+                    company_name: formData.company_name || null,
+                    company_gst: formData.company_gst || null
+                }
+            );
+
+            if (!savePasswordResponse.data.success) {
+                throw new Error(savePasswordResponse.data.message || 'Failed to save user details');
+            }
+
+            // Then proceed with OTP verification
+            await handleAadharOTP();
+            
+        } catch (error) {
+            console.error('Submit error:', error);
+            setIsLoading(false);
+            setAlertMessage(error.response?.data?.message || 'Registration failed');
+        }
+    };
+
+    const [otpAttempts, setOtpAttempts] = useState(0);
+    const [otpResendDisabled, setOtpResendDisabled] = useState(false);
+    const [otpExpiryTime, setOtpExpiryTime] = useState(null);
+
+    const handleAadharOTP = async () => {
+        try {
+            setIsLoading(true);
+            setOtpAttempts(0); // Reset attempts on new OTP request
+            
+            const response = await axios.post(
+                `${process.env.REACT_APP_API_URL}/send-aadhar-otp`,
+                { aadharNumber: formData.card_detail }
+            );
+
+            if (response.data.success) {
+                setStep(3); // Move to OTP verification step
+                startOtpTimer();
+                setOtpExpiryTime(Date.now() + (response.data.expiresIn * 1000));
+                setAlertMessage('OTP sent successfully. Please check your phone.');
+                setOtpResendDisabled(true);
+                setTimeout(() => setOtpResendDisabled(false), 30000); // Enable resend after 30 seconds
+            } else {
+                throw new Error(response.data.message || 'Failed to send OTP');
+            }
+        } catch (error) {
+            console.error('Error sending OTP:', error);
+            setAlertMessage(error.response?.data?.message || 'Failed to send OTP. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleVerifyOTP = async (otpValue) => {
+        try {
+            if (otpAttempts >= 3) {
+                setAlertMessage('Too many failed attempts. Please request a new OTP.');
+                return;
+            }
+
+            if (otpExpiryTime && Date.now() > otpExpiryTime) {
+                setAlertMessage('OTP has expired. Please request a new one.');
+                return;
+            }
+
+            setIsLoading(true);
+            console.log('Verifying OTP:', {
+                aadharNumber: formData.card_detail,
+                otp: otpValue,
+                email: formData.email
+            });
+
+            const response = await axios.post(
+                `${process.env.REACT_APP_API_URL}/verify-aadhar-otp`,
+                {
+                    aadharNumber: formData.card_detail,
+                    otp: otpValue.toString(), // Ensure OTP is a string
+                    email: formData.email
+                }
+            );
+
+            if (response.data.success) {
+                setAlertMessage('Registration completed successfully!');
+                // Navigate to login page after successful verification
+                setTimeout(() => navigate('/login'), 2000);
+            } else {
+                setOtpAttempts(prev => prev + 1);
+                setAlertMessage(response.data.message || 'OTP verification failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error verifying OTP:', error.response?.data || error);
+            setOtpAttempts(prev => prev + 1);
+            setAlertMessage(error.response?.data?.message || 'OTP verification failed. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
+    // Create refs properly at the component level
+    const otpRefs = [
+        useRef(null),
+        useRef(null),
+        useRef(null),
+        useRef(null),
+        useRef(null),
+        useRef(null)
+    ];
+
+    const handleOTPInput = (index, value) => {
+        if (!/^\d*$/.test(value)) return;
+
+        const newOtpValues = [...otpValues];
+        newOtpValues[index] = value;
+        setOtpValues(newOtpValues);
+
+        // Auto-focus next input
+        if (value !== '' && index < 5) {
+            otpRefs[index + 1].current.focus();
+        }
+
+        // Auto-verify when all digits are entered
+        if (newOtpValues.every(v => v !== '') && newOtpValues.join('').length === 6) {
+            handleVerifyOTP(newOtpValues.join(''));
+        }
+    };
+
+    const handleKeyDown = (index, e) => {
+        if (e.key === 'Backspace' && otpValues[index] === '' && index > 0) {
+            otpRefs[index - 1].current.focus();
+        }
+    };
+
+    const handlePaste = (e) => {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+        const newOtpValues = [...otpValues];
+        
+        for (let i = 0; i < pastedData.length; i++) {
+            if (i < 6) newOtpValues[i] = pastedData[i];
+        }
+        
+        setOtpValues(newOtpValues);
+        
+        if (pastedData.length === 6) {
+            handleVerifyOTP(pastedData);
+        } else if (pastedData.length > 0) {
+            otpRefs[pastedData.length].current.focus();
+        }
+    };
+
+    const renderOTPInput = () => (
+        <div className="form-group otp-container">
+            <div className="otp-input-wrapper">
+                <div className="otp-boxes">
+                    {otpValues.map((value, index) => (
+                        <input
+                            key={index}
+                            ref={otpRefs[index]}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={value}
+                            onChange={(e) => handleOTPInput(index, e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(index, e)}
+                            onPaste={handlePaste}
+                            disabled={isLoading}
+                            required
+                            autoComplete="off"
+                            className="otp-box"
+                        />
+                    ))}
+                </div>
+                {otpTimer > 0 && (
+                    <div className="otp-timer">
+                        Time remaining: {Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')}
+                    </div>
+                )}
+            </div>
+            <div className="otp-actions">
+                {otpTimer > 0 ? (
+                    <button 
+                        type="button" 
+                        onClick={() => handleVerifyOTP(otpValues.join(''))}
+                        disabled={otpValues.join('').length !== 6 || isLoading || otpAttempts >= 3}
+                        className="verify-btn"
+                    >
+                        {isLoading ? 'Verifying...' : 'Verify OTP'}
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleAadharOTP();
+                            setOtpValues(['', '', '', '', '', '']);
+                        }}
+                        disabled={isLoading}
+                        className="resend-btn"
+                    >
+                        Resend OTP
+                    </button>
+                )}
+            </div>
+            {otpAttempts > 0 && (
+                <div className="otp-attempts">
+                    Attempts remaining: {3 - otpAttempts}
+                </div>
+            )}
+        </div>
+    );
+
+    const startOtpTimer = () => {
+        setOtpTimer(120); // Reset timer to 120 seconds
+        const timer = setInterval(() => {
+            setOtpTimer(prev => {
+                if (prev <= 0) {
+                    clearInterval(timer);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    const handleResendOTP = async () => {
+        try {
+            setIsLoading(true);
+            const response = await axios.post(
+                `${process.env.REACT_APP_API_URL}/send-aadhar-otp`,
+                { aadharNumber: formData.card_detail },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+
+            if (response.data.success) {
+                setOtpTimer(120);
+                setAlertMessage('OTP sent successfully!');
+            }
+        } catch (error) {
+            setAlertMessage(error.response?.data?.message || 'Failed to send OTP');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const formatTime = (seconds) => {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    };
+
+    useEffect(() => {
+        let timer;
+        if (otpTimer > 0) {
+            timer = setInterval(() => {
+                setOtpTimer(prev => prev - 1);
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [otpTimer]);
+
+    useEffect(() => {
+        if (alertMessage) {
+            alert(alertMessage);
+            setAlertMessage(null);
+        }
+    }, [alertMessage]);
+
+    if (step === 1) {
+        return (
+            <div>
+                <h2 className="register-headi">Verify Registration</h2>
+                <div className="register-container">
+                    <div className="register-left">
+                        <form onSubmit={handlePhoneVerification}>
+                            <div className="form-grouppp">
+                                <label>Enter the phone number from which you registered</label>
+                                <input 
+                                    type="tel" 
+                                    value={verificationPhone}
+                                    onChange={(e) => setVerificationPhone(e.target.value)}
+                                    placeholder="+91XXXXXXXXXX"
+                                    pattern="^(\+\d{12}|\d{10})$"
+                                    maxLength="13"
+                                    required
+                                />
+                            </div>
+                            <button type="submit" disabled={isLoading}>
+                                {isLoading ? 'Submitting...' : 'Submit'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (step === 3) {
+        return (
+            <div>
+                <h2 className="register-headi">Verify OTP</h2>
+                <div className="register-container">
+                    <div className="register-left">
+                        <div className="otp-label" style={{ textAlign: 'center', marginBottom: '15px' }}>
+                            Enter the OTP sent to your Aadhar-linked mobile number
+                        </div>
+                        {renderOTPInput()}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Step 2: Registration form
+    return (
+        <div>
+            <h2 className="register-headi">Complete Registration</h2>
+            <div className="register-container">
+                <div className="register-left">
+                    <form onSubmit={handleSubmit} noValidate={false}>
+                        <div className="form-imppp">
+                            <span className="form-imp-1">
+                                <div className="form-grouppp">
+                                    <label>Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="username" 
+                                        value={formData.username} 
+                                        disabled
+                                    />
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Telephone</label>
+                                    <input 
+                                        type="tel" 
+                                        name="telephone" 
+                                        value={formData.telephone} 
+                                        disabled
+                                    />
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Email</label>
+                                    <input 
+                                        type="email" 
+                                        name="email" 
+                                        value={formData.email} 
+                                        disabled
+                                    />
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Password*</label>
+                                    <input 
+                                        type="password" 
+                                        name="password" 
+                                        placeholder="Enter password"
+                                        value={formData.password} 
+                                        onChange={handleInputChange} 
+                                        required 
+                                        title="Password is required"
+                                    />
+                                    {/* Add password requirements display */}
+                                    {formData.password && (
+                                        <div className="password-requirements">
+                                            <small>Password requirements:</small>
+                                            <ul>
+                                                <li style={{ color: formData.password.length >= 8 ? 'green' : 'red' }}>
+                                                    {formData.password.length >= 8 ? '✓' : '×'} At least 8 characters
+                                                </li>
+                                                <li style={{ color: /([A-Z])/.test(formData.password) ? 'green' : 'red' }}>
+                                                    {/([A-Z])/.test(formData.password) ? '✓' : '×'} One uppercase letter
+                                                </li>
+                                                <li style={{ color: /([a-z])/.test(formData.password) ? 'green' : 'red' }}>
+                                                    {/([a-z])/.test(formData.password) ? '✓' : '×'} One lowercase letter
+                                                </li>
+                                                <li style={{ color: /(\d)/.test(formData.password) ? 'green' : 'red' }}>
+                                                    {/(\d)/.test(formData.password) ? '✓' : '×'} One number
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Confirm Password*</label>
+                                    <input 
+                                        type="password" 
+                                        name="confirm_password" 
+                                        placeholder="Confirm password"
+                                        value={formData.confirm_password} 
+                                        onChange={handleInputChange} 
+                                        required 
+                                        title="Please confirm your password"
+                                    />
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Address</label>
+                                    <textarea 
+                                        name="address" 
+                                        value={formData.address} 
+                                        disabled
+                                    />
+                                </div>
+                            </span>
+                            
+                            <span className="form-imp-2">
+                                <div className="form-grouppp">
+                                    <label>Company Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="company_name" 
+                                        value={formData.company_name} 
+                                        disabled
+                                    />
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Company GST</label>
+                                    <input 
+                                        type="text" 
+                                        name="company_gst" 
+                                        value={formData.company_gst} 
+                                        onChange={handleInputChange}
+                                    />
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Card Type*</label>
+                                    <select 
+                                        name="card_select" 
+                                        value="Aadhaar" 
+                                        disabled
+                                        required
+                                        title="Card type is required"
+                                    >
+                                        <option value="Aadhaar">Aadhar Card</option>
+                                    </select>
+                                </div>
+                                <div className="form-grouppp">
+                                    <label>Aadhaar Number*</label>
+                                    <input
+                                        type="text"
+                                        name="card_detail"
+                                        value={formData.card_detail}
+                                        onChange={handleInputChange}
+                                        placeholder="Enter Aadhaar Number"
+                                        maxLength={12}
+                                        minLength={12}
+                                        pattern="\d{12}"
+                                        required
+                                        title="Please enter a valid 12-digit Aadhaar number"
+                                        onInvalid={(e) => {
+                                            if (e.target.validity.valueMissing) {
+                                                e.target.setCustomValidity('Aadhaar number is required');
+                                            } else if (e.target.validity.patternMismatch) {
+                                                e.target.setCustomValidity('Please enter a valid 12-digit Aadhaar number');
+                                            }
+                                        }}
+                                        onInput={(e) => e.target.setCustomValidity('')}
+                                    />
+                                </div>
+                            </span>
+                        </div>
+                        <button 
+                            type="submit"
+                            className="submit-button"
+                            disabled={isLoading}
+                        >
+                            {isLoading ? 'Processing...' : 'Complete Registration'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Register;

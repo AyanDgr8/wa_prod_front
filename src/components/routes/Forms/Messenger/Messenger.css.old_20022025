@@ -1,0 +1,104 @@
+/* src/components/routes/Forms/Messenger/Messenger.css */
+
+.messenger-container {
+    /* background-color: black; */
+    color: white;
+    padding: 1rem;
+    font-family: Verdana, Arial, Helvetica, sans-serif;
+
+  }
+  
+  .sendinggg_twos{
+    display: flex;
+  }
+  
+  .form-container {
+    width: 60%;
+    margin: auto;
+    padding: 1rem;
+    background-color: #1e1e1e;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+  
+  .form-section {
+    margin-bottom: 1rem;
+  }
+  
+  .form-label {
+    font-size: 1rem;
+    font-weight: bold;
+    margin-bottom: 0.1rem;
+    display: block;
+    text-align: left;
+    color: #EF6F53;
+  }
+  
+  .form-input,
+  .form-textarea {
+    width: 100%;
+    padding: 0.25rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    background-color: #253e5897;
+    color: white;
+    outline: none;
+  }
+  
+  .form-textarea {
+    height: 100px;
+  }
+  
+  .form-input:focus,
+  .form-textarea:focus {
+    border-color: #EF6F53;
+    color: white;
+  }
+  
+  .form-button {
+    background-color: #EF6F53;
+    color: white;
+    border: none;
+    width: 30%;
+    margin: auto;
+    padding: 0.25rem;
+    font-size: 0.8rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+  
+  .form-button:hover {
+    background-color: #d95b47;
+  }
+
+  .file-upload-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .file-input {
+    max-width: 95px;
+  }
+
+  .file-name-input {
+    flex: 1;
+    background-color: #1e1e1e;
+    cursor: default;
+  }
+
+  .file-types {
+    font-size: 12px;
+    font-weight: normal;
+  }
+
+@media (max-width: 600px) {
+
+  .sendinggg_twos{
+      display: flex;
+      flex-direction: column;
+  }
+}
